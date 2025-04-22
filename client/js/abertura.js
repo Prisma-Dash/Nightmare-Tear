@@ -18,7 +18,7 @@ export default class abertura extends Phaser.Scene {
 
     create() {
         this.add.image(400, 225, 'fundo')
-            .setIntercative()
+            .setInteractive()
             .on('pointerdown', () => {
                 this.scene.start('precarregamento')
             })
