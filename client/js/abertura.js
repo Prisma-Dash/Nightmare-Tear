@@ -1,41 +1,32 @@
 export default class abertura extends Phaser.Scene {
+  constructor() {
+    super("abertura");
+  }
 
-    constructor() {
+  init(data) {}
 
-        super('abertura')
+  preload() {
+    this.load.image("fundo", "assets/abertura-fundo.png");
+    this.load.image("botao", "assets/UI/botao-play.png");
+  }
 
-    }
+  create() {
+    const largura = this.cameras.main.width;
+    const altura = this.cameras.main.height;
 
-    init() {
+    this.add
+      .image(largura / 2, altura / 2, "fundo")
+      .setDisplaySize(largura, altura);
 
-    }
+    this.botao = this.add
+      .image(largura / 2, altura * 0.75, "botao")
+      .setScale(0.25)
+      .setInteractive()
+      .on("pointerdown", () => {
+    
+        this.scene.start("precarregamento");
+      });
+  }
 
-    preload() {
-
-        this.load.image('fundo', 'assets/abertura-fundo.png')
-        this.load.image('botao', 'assets/botao-play.png')
-
-    }
-
-    create() {
-        this.add.image(400, 225, 'fundo')
-            .setInteractive()
-            .on('pointerdown', () => {
-                this.scene.start('precarregamento')
-            })
-
-        this.botao = this.add.image(400, 375, 'botao')
-            .setScale(0.25) // Define a escala para 25%
-            .setInteractive()
-            .on('pointerdown', () => {
-                this.scene.start('fase1')
-            })
-    }
-
-
-
-    update() {
-
-    }
-
+  update() {}
 }

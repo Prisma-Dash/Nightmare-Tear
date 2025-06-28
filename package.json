@@ -1,13 +1,21 @@
 {
+  "name": "nightmare-tear",
+  "version": "1.0.0",
+  "description": "Um jogo multiplayer cooperativo com Phaser 3 e Socket.IO",
+  "main": "servidor.js",
+  "scripts": {
+    "start": "node servidor.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Seu Nome Aqui",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  },
   "devDependencies": {
     "@eslint/js": "^9.23.0",
     "eslint": "^9.23.0",
     "globals": "^16.0.0"
-  },
-  "dependencies": {
-    "express": "^5.1.0"
-  },
-  "scripts": {
-    "start": "node servidor.js"
   }
 }

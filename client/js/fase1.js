@@ -1,138 +1,808 @@
 export default class fase1 extends Phaser.Scene {
-
   constructor() {
-    super('fase1');
+    super("fase1");
 
-    this.threshold = 0.1; // Força mínima do joystick para mover o personagem
-    this.speed = 100; // Velocidade do personagem
-    this.direcaoAtual = 'frente'; // Direção atual do personagem
+    this.threshold = 0.1;
+    this.speed = 350;
+    this.direcaoAtual = "frente";
+    this.personagemLocal = null;
+    this.controleScene = null;
+    this.sunyActive = false;
+
+    this.nephisLocal = null;
+    this.nephisSpeed = 350;
+    this.nephisDirecaoAtual = "frente";
+    this.nephisKeys = null;
+    this.nephisActive = false;
+
+    this.enemies = null;
+    this.SKELETON_ATTACK_RANGE = 50;
+
+    this.maxSkeletons = 5;
+    this.currentSkeletons = 0;
+    this.totalSkeletonsSpawned = 0;
+
+    this.barConfig = {
+      width: 40,
+      height: 6,
+      yOffset: 8,
+      healthColor: 0x00ff00,
+      damageColor: 0xff0000,
+    };
+    this.assignedCharacter = null;
+    this.currentRoomNumber = null;
+
+    this.outrosJogadores = {};
+    this.socket = null;
+    this.jogadoresInfo = null;
   }
 
-  init() { }
+  init(data) {
+    if (data && data.playerCharacter) {
+      this.assignedCharacter = data.playerCharacter;
+      this.currentRoomNumber = data.roomNumber;
+      console.log(
+        `Fase1: Personagem atribuído: ${this.assignedCharacter} na sala: ${this.currentRoomNumber}`
+      );
+      if (this.assignedCharacter === "suny") {
+        this.sunyActive = true;
+        this.nephisActive = false;
+      } else if (this.assignedCharacter === "nephis") {
+        this.nephisActive = true;
+        this.sunyActive = false;
+      }
+    } else {
+      console.warn(
+        "Fase1: Nenhuma atribuição de personagem ou sala recebida. Atribuindo Suny e sala 1 por padrão para testes diretos."
+      );
+      this.assignedCharacter = "suny";
+      this.currentRoomNumber = 1;
+      this.sunyActive = true;
+      this.nephisActive = false;
+    }
+  }
 
   preload() {
-    this.load.tilemapTiledJSON('mapa', 'assets/mapa/mapa.json');
-    this.load.image('grama_pedra', 'assets/mapa/grama_pedra.png');
-    this.load.image('plantas', 'assets/mapa/plantas.png');
-    this.load.spritesheet('suny', 'assets/suny.png', {
+    this.load.spritesheet("suny", "assets/suny.png", {
       frameWidth: 64,
-      frameHeight: 64
+      frameHeight: 64,
     });
-    this.load.plugin('rexvirtualjoystickplugin', 'https://raw.githubusercontent.com/rexrainbow/phaser3-rex-notes/master/dist/rexvirtualjoystickplugin.min.js', true);
+
+    this.load.spritesheet("nephis", "assets/nephis.png", {
+      frameWidth: 64,
+      frameHeight: 64,
+    });
+
+    this.load.spritesheet("mob_skeleton", "assets/mob_skeleton_universal.png", {
+      frameWidth: 64,
+      frameHeight: 64,
+    });
+
+    this.load.tilemapTiledJSON("mapa1", "assets/mapa/mapa1.json");
+    this.load.image("chao_pedra", "assets/mapa/chao_pedra.png");
+    this.load.image("chao_rua", "assets/mapa/chao_rua.png");
+    this.load.image("ruinas", "assets/mapa/ruinas.png");
+    this.load.image("arvores1", "assets/mapa/arvore1.png");
+    this.load.image("lava", "assets/mapa/chao_lava.png");
+
+    this.load.image("full_screen", "assets/full_screen.png");
   }
 
   create() {
-    // Carregar o mapa e tilesets
-    this.tilemapMapa = this.make.tilemap({ key: 'mapa' });
-    const tilesetGramaPedra = this.tilemapMapa.addTilesetImage('grama_pedra', 'grama_pedra');
-    const tilesetPlantas = this.tilemapMapa.addTilesetImage('plantas', 'plantas');
+    this.tilemapMapa = this.make.tilemap({ key: "mapa1" });
+    const tilesets = [
+      this.tilemapMapa.addTilesetImage("chao_pedra", "chao_pedra"),
+      this.tilemapMapa.addTilesetImage("chao_rua", "chao_rua"),
+      this.tilemapMapa.addTilesetImage("ruinas", "ruinas"),
+      this.tilemapMapa.addTilesetImage("arvores1", "arvores1"),
+      this.tilemapMapa.addTilesetImage("lava", "lava"),
+    ];
 
-    // Adicionar camadas do mapa
-    const camadaGramaPedra = this.tilemapMapa.createLayer('grama_pedra', tilesetGramaPedra, 0, 0);
+    const camadaChao = this.tilemapMapa.createLayer("chao", tilesets, 0, 0);
+    const camadaArvore = this.tilemapMapa.createLayer("arvore", tilesets, 0, 0);
+    const camadaMontanha = this.tilemapMapa.createLayer(
+      "montanha",
+      tilesets,
+      0,
+      0
+    );
+    const camadaMontanha2 = this.tilemapMapa.createLayer(
+      "montanha2",
+      tilesets,
+      0,
+      0
+    );
 
-    // Adicionar o personagem
-    this.personagemLocal = this.physics.add.sprite(100, 100, 'suny');
+    camadaChao.setDepth(0);
+    camadaMontanha.setDepth(1);
+    camadaMontanha2.setDepth(1.5);
+    camadaArvore.setDepth(10);
 
-    const camadaPlantas = this.tilemapMapa.createLayer('plantas', tilesetPlantas, 0, 0);
+    const centerX = this.tilemapMapa.widthInPixels / 2;
+    const centerY = this.tilemapMapa.heightInPixels / 2;
 
-    // Configurar colisão para a camada de plantas
-    camadaPlantas.setCollisionByProperty({ collides: true });
-
-    // Configurar colisão entre o personagem e as plantas
-    this.physics.add.collider(this.personagemLocal, camadaPlantas);
-
-    // Configurar os limites do mapa
-    this.physics.world.setBounds(0, 0, this.tilemapMapa.widthInPixels, this.tilemapMapa.heightInPixels);
+    this.personagemLocal = this.physics.add.sprite(centerX, centerY, "suny");
     this.personagemLocal.setCollideWorldBounds(true);
+    this.personagemLocal.vidaMaxima = 200;
+    this.personagemLocal.vidaAtual = 200;
+    this.personagemLocal.healthBar = this.criarBarraDeVida();
+    this.personagemLocal.setDepth(2.5);
 
-    // Configurar a câmera para seguir o personagem
-    this.cameras.main.startFollow(this.personagemLocal);
-    this.cameras.main.setBounds(0, 0, this.tilemapMapa.widthInPixels, this.tilemapMapa.heightInPixels);
+    this.personagemLocal.setVisible(this.sunyActive);
+    this.personagemLocal.body.enable = this.sunyActive;
 
-    // Animações do personagem
-    this.anims.create({
-      key: 'personagem-andando-direita',
-      frames: this.anims.generateFrameNumbers('suny', { start: 260, end: 267 }),
-      frameRate: 10,
-      repeat: -1
+    const nephisSpawnX = centerX + 100;
+    const nephisSpawnY = centerY;
+    this.nephisLocal = this.physics.add.sprite(
+      nephisSpawnX,
+      nephisSpawnY,
+      "nephis"
+    );
+    this.nephisLocal.setCollideWorldBounds(true);
+    this.nephisLocal.vidaMaxima = 200;
+    this.nephisLocal.vidaAtual = 200;
+    this.nephisLocal.healthBar = this.criarBarraDeVida();
+    this.nephisLocal.setDepth(2.5);
+
+    this.nephisLocal.setVisible(this.nephisActive);
+    this.nephisLocal.body.enable = this.nephisActive;
+
+    camadaArvore.setCollisionByProperty({ collider: true });
+    camadaMontanha.setCollisionByProperty({ collider: true });
+    camadaMontanha2.setCollisionByProperty({ collider: true });
+
+    this.physics.add.collider(this.personagemLocal, [
+      camadaArvore,
+      camadaMontanha,
+      camadaMontanha2,
+    ]);
+    this.physics.add.collider(this.nephisLocal, [
+      camadaArvore,
+      camadaMontanha,
+      camadaMontanha2,
+    ]);
+    this.physics.add.collider(this.personagemLocal, this.nephisLocal);
+
+    this.criarAnimacoesPersonagem();
+    this.criarAnimacoesNephis();
+    this.criarAnimacoesEsqueleto();
+
+    this.enemies = this.physics.add.group();
+    this.physics.add.collider(this.enemies, [
+      camadaArvore,
+      camadaMontanha,
+      camadaMontanha2,
+    ]);
+    this.physics.add.collider(this.enemies, this.enemies);
+    this.physics.add.overlap(
+      this.personagemLocal,
+      this.enemies,
+      this.handlePlayerSkeletonOverlap,
+      null,
+      this
+    );
+    this.physics.add.overlap(
+      this.nephisLocal,
+      this.enemies,
+      this.handlePlayerSkeletonOverlap,
+      null,
+      this
+    );
+
+    this.adicionarEsqueleto(3400, 550);
+
+    this.scene.launch("controle");
+    this.controleScene = this.scene.get("controle");
+
+    if (this.assignedCharacter === "nephis") {
+      if (
+        this.controleScene &&
+        typeof this.controleScene.hideJoystick === "function"
+      ) {
+        this.controleScene.hideJoystick();
+      }
+    } else {
+      if (
+        this.controleScene &&
+        typeof this.controleScene.showJoystick === "function"
+      ) {
+        this.controleScene.showJoystick();
+      }
+    }
+
+    this.physics.world.setBounds(
+      0,
+      0,
+      this.tilemapMapa.widthInPixels,
+      this.tilemapMapa.heightInPixels
+    );
+
+    if (this.assignedCharacter === "suny") {
+      this.cameras.main.startFollow(this.personagemLocal);
+    } else if (this.assignedCharacter === "nephis") {
+      this.cameras.main.startFollow(this.nephisLocal);
+    }
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.tilemapMapa.widthInPixels,
+      this.tilemapMapa.heightInPixels
+    );
+
+    this.input.keyboard.on("keydown-H", () => {
+      if (this.sunyActive) this.receberDano(this.personagemLocal, 20);
     });
 
-    this.anims.create({
-      key: 'personagem-andando-esquerda',
-      frames: this.anims.generateFrameNumbers('suny', { start: 244, end: 251 }),
-      frameRate: 10,
-      repeat: -1
+    this.input.keyboard.on("keydown-C", (event) => {
+      if (
+        this.sunyActive &&
+        (event.key === "ç" ||
+          event.key === "Ç" ||
+          event.key === "c" ||
+          event.key === "C")
+      ) {
+        const primeiroInimigo = this.enemies.getFirstAlive();
+        if (primeiroInimigo) {
+          this.receberDano(primeiroInimigo, 20);
+        }
+      }
     });
 
-    this.anims.create({
-      key: 'personagem-andando-tras',
-      frames: this.anims.generateFrameNumbers('suny', { start: 236, end: 243 }),
-      frameRate: 10,
-      repeat: -1
+    this.nephisKeys = this.input.keyboard.addKeys({
+      up: Phaser.Input.Keyboard.KeyCodes.W,
+      down: Phaser.Input.Keyboard.KeyCodes.S,
+      left: Phaser.Input.Keyboard.KeyCodes.A,
+      right: Phaser.Input.Keyboard.KeyCodes.D,
+      damage: Phaser.Input.Keyboard.KeyCodes.J,
     });
 
-    this.anims.create({
-      key: 'personagem-andando-frente',
-      frames: this.anims.generateFrameNumbers('suny', { start: 252, end: 260 }),
-      frameRate: 10,
-      repeat: -1
-    });
+    if (this.nephisActive) {
+      this.nephisKeys.damage.on("down", () =>
+        this.receberDano(this.nephisLocal, 20)
+      );
+    }
 
-    // Configurar joystick virtual
-    this.joystick = this.plugins.get('rexvirtualjoystickplugin').add(this, {
-      x: 200,
-      y: 310,
-      radius: 50, // Raio do joystick
-      base: this.add.circle(120, 360, 50, 0x888888),
-      thumb: this.add.circle(120, 360, 25, 0xcccccc)
+    const fullscreenButton = this.add
+      .image(this.cameras.main.width - 40, 40, "full_screen")
+      .setOrigin(0.5)
+      .setInteractive()
+      .setScale(0.05)
+      .setScrollFactor(0)
+      .setDepth(1001);
+
+    fullscreenButton.on("pointerdown", () => {
+      if (this.scale.isFullscreen) {
+        this.scale.stopFullscreen();
+      } else {
+        this.scale.startFullscreen();
+      }
     });
   }
 
-  update() {
-    const angle = Phaser.Math.DegToRad(this.joystick.angle); // Converte o ângulo para radianos
-    const force = this.joystick.force;
+  criarBarraDeVida() {
+    const healthBar = {
+      bg: this.add.graphics(),
+      fg: this.add.graphics(),
+    };
+    healthBar.bg.setVisible(false);
+    healthBar.fg.setVisible(false);
+    return healthBar;
+  }
 
-    if (force > this.threshold) {
-      const velocityX = Math.cos(angle) * this.speed;
-      const velocityY = Math.sin(angle) * this.speed;
+  atualizarBarraVida(personagem) {
+    if (
+      !personagem.active ||
+      !personagem.healthBar ||
+      !personagem.healthBar.bg.visible
+    )
+      return;
+    const barX = personagem.x - this.barConfig.width / 2;
+    const barY =
+      personagem.y -
+      personagem.displayHeight / 2 -
+      this.barConfig.yOffset -
+      this.barConfig.height;
+    personagem.healthBar.bg.setPosition(barX, barY);
+    personagem.healthBar.fg.setPosition(barX, barY);
+    const percentualVida = Phaser.Math.Clamp(
+      personagem.vidaAtual / personagem.vidaMaxima,
+      0,
+      1
+    );
+    personagem.healthBar.bg.clear();
+    personagem.healthBar.bg.fillStyle(this.barConfig.damageColor, 0.7);
+    personagem.healthBar.bg.fillRect(
+      0,
+      0,
+      this.barConfig.width,
+      this.barConfig.height
+    );
+    personagem.healthBar.fg.clear();
+    personagem.healthBar.fg.fillStyle(this.barConfig.healthColor, 1);
+    personagem.healthBar.fg.fillRect(
+      0,
+      0,
+      this.barConfig.width * percentualVida,
+      this.barConfig.height
+    );
+    personagem.healthBar.bg.setDepth(personagem.depth + 1);
+    personagem.healthBar.fg.setDepth(personagem.depth + 2);
+  }
 
-      this.personagemLocal.setVelocity(velocityX, velocityY);
+  receberDano(personagem, quantidade) {
+    if (
+      !personagem.active ||
+      typeof personagem.vidaAtual === "undefined" ||
+      personagem.vidaAtual <= 0
+    )
+      return;
+    personagem.vidaAtual -= quantidade;
+    if (personagem.vidaAtual < 0) personagem.vidaAtual = 0;
+    console.log(
+      `Vida de ${personagem.texture.key}: ${personagem.vidaAtual}/${personagem.vidaMaxima}`
+    );
+    if (personagem.healthBar) {
+      personagem.healthBar.bg.setVisible(true);
+      personagem.healthBar.fg.setVisible(true);
+      this.atualizarBarraVida(personagem);
+    }
+    if (personagem.vidaAtual <= 0) {
+      console.log(`${personagem.texture.key} morreu!`);
+      personagem.setTint(0xff0000);
 
-      // Animação do personagem conforme a direção do movimento
-      if (Math.abs(velocityX) > Math.abs(velocityY)) {
-        if (velocityX > 0) {
-          this.personagemLocal.anims.play('personagem-andando-direita', true);
-          this.direcaoAtual = 'direita';
-        } else {
-          this.personagemLocal.anims.play('personagem-andando-esquerda', true);
-          this.direcaoAtual = 'esquerda';
+      if (
+        personagem === this.personagemLocal ||
+        personagem === this.nephisLocal
+      ) {
+        this.physics.world.pause();
+
+        if (
+          this.controleScene &&
+          typeof this.controleScene.hideJoystick === "function"
+        ) {
+          this.controleScene.hideJoystick();
         }
+
+        let deathAnimationKey = "";
+
+        if (personagem === this.personagemLocal) {
+          deathAnimationKey = "personagem-morte";
+        } else if (personagem === this.nephisLocal) {
+          deathAnimationKey = "nephis-morte";
+        }
+
+        personagem.anims.play(deathAnimationKey, true);
+
+        personagem.once("animationcomplete", () => {
+          personagem.anims.stop();
+
+          const playerData = {
+            x: personagem.x,
+            y: personagem.y,
+            frame: 209,
+            tint: personagem.tintTopLeft,
+            isSuny: personagem === this.personagemLocal,
+          };
+
+          this.time.delayedCall(
+            2000,
+            () => {
+              this.scene.stop("fase1");
+              this.scene.start("morte", { playerData: playerData });
+            },
+            [],
+            this
+          );
+        });
       } else {
-        if (velocityY > 0) {
-          this.personagemLocal.anims.play('personagem-andando-frente', true);
-          this.direcaoAtual = 'frente';
-        } else {
-          this.personagemLocal.anims.play('personagem-andando-tras', true);
-          this.direcaoAtual = 'tras';
+        personagem.anims.stop();
+        if (personagem.texture.key === "mob_skeleton") {
+          this.currentSkeletons--;
+          if (this.currentSkeletons < this.maxSkeletons) {
+            this.time.delayedCall(
+              1000,
+              () => {
+                const spawnX = Phaser.Math.Between(
+                  100,
+                  this.tilemapMapa.widthInPixels - 100
+                );
+                const spawnY = Phaser.Math.Between(
+                  100,
+                  this.tilemapMapa.heightInPixels - 100
+                );
+                this.adicionarEsqueleto(spawnX, spawnY);
+              },
+              [],
+              this
+            );
+          }
         }
-      }
-    } else {
-      // Se a força do joystick for baixa, o personagem para
-      this.personagemLocal.setVelocity(0);
-      switch (this.direcaoAtual) {
-        case 'frente':
-          this.personagemLocal.anims.play('personagem-parado-frente', true);
-          break;
-        case 'direita':
-          this.personagemLocal.anims.play('personagem-parado-direita', true);
-          break;
-        case 'esquerda':
-          this.personagemLocal.anims.play('personagem-parado-esquerda', true);
-          break;
-        case 'tras':
-          this.personagemLocal.anims.play('personagem-parado-tras', true);
-          break;
+
+        this.time.delayedCall(500, () => {
+          if (personagem.healthBar) {
+            personagem.healthBar.bg.destroy();
+            personagem.healthBar.fg.destroy();
+          }
+          personagem.destroy();
+        });
       }
     }
+  }
+
+  criarAnimacoesPersonagem() {
+    this.anims.create({
+      key: "personagem-andando-direita",
+      frames: this.anims.generateFrameNumbers("suny", { start: 94, end: 103 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "personagem-andando-esquerda",
+      frames: this.anims.generateFrameNumbers("suny", { start: 72, end: 81 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "personagem-andando-tras",
+      frames: this.anims.generateFrameNumbers("suny", { start: 61, end: 70 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "personagem-andando-frente",
+      frames: this.anims.generateFrameNumbers("suny", { start: 83, end: 92 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "personagem-parado-frente",
+      frames: [{ key: "suny", frame: 82 }],
+      frameRate: 1,
+      repeat: 0,
+    });
+    this.anims.create({
+      key: "personagem-morte",
+      frames: this.anims.generateFrameNumbers("suny", { start: 204, end: 209 }),
+      frameRate: 10,
+      repeat: 0,
+    });
+  }
+
+  criarAnimacoesNephis() {
+    this.anims.create({
+      key: "nephis-andando-direita",
+      frames: this.anims.generateFrameNumbers("nephis", {
+        start: 94,
+        end: 103,
+      }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "nephis-andando-esquerda",
+      frames: this.anims.generateFrameNumbers("nephis", { start: 72, end: 81 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "nephis-andando-tras",
+      frames: this.anims.generateFrameNumbers("nephis", { start: 61, end: 70 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "nephis-andando-frente",
+      frames: this.anims.generateFrameNumbers("nephis", { start: 83, end: 92 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "nephis-parado-frente",
+      frames: [{ key: "nephis", frame: 82 }],
+      frameRate: 1,
+      repeat: 0,
+    });
+    this.anims.create({
+      key: "nephis-morte",
+      frames: this.anims.generateFrameNumbers("nephis", {
+        start: 204,
+        end: 209,
+      }),
+      frameRate: 10,
+      repeat: 0,
+    });
+  }
+
+  criarAnimacoesEsqueleto() {
+    const SKELETON_KEY = "mob_skeleton";
+
+    this.anims.create({
+      key: "skeleton-andando-direita",
+      frames: this.anims.generateFrameNumbers(SKELETON_KEY, {
+        start: 94,
+        end: 104,
+      }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "skeleton-andando-esquerda",
+      frames: this.anims.generateFrameNumbers(SKELETON_KEY, {
+        start: 72,
+        end: 82,
+      }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "skeleton-andando-tras",
+      frames: this.anims.generateFrameNumbers(SKELETON_KEY, {
+        start: 83,
+        end: 93,
+      }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: "skeleton-andando-frente",
+      frames: this.anims.generateFrameNumbers(SKELETON_KEY, {
+        start: 105,
+        end: 115,
+      }),
+      frameRate: 10,
+      repeat: -1,
+    });
+  }
+
+  adicionarEsqueleto(x, y) {
+    if (this.currentSkeletons >= this.maxSkeletons) {
+      console.log(
+        "Número máximo de esqueletos atingido. Não é possível adicionar mais."
+      );
+      return;
+    }
+
+    const skeleton = this.enemies.create(x, y, "mob_skeleton");
+
+    if (!skeleton) {
+      console.error(
+        "[ERRO CRÍTICO] O objeto esqueleto não foi criado! Verifique se 'mob_skeleton' foi carregado corretamente no preload() e se o asset está disponível no caminho."
+      );
+      return;
+    }
+
+    skeleton.setCollideWorldBounds(true);
+    skeleton.setDepth(this.personagemLocal.depth);
+
+    skeleton.vidaMaxima = 100;
+    skeleton.vidaAtual = 100;
+    skeleton.healthBar = this.criarBarraDeVida();
+    this.currentSkeletons++;
+    this.totalSkeletonsSpawned++;
+    console.log(
+      `Novo esqueleto adicionado em (${x}, ${y}). Esqueletos ativos: ${this.currentSkeletons}/${this.maxSkeletons}`
+    );
+  }
+
+  gerenciarIAEsqueleto(skeleton) {
+    if (!skeleton.active || !this.personagemLocal.active) {
+      if (skeleton.body) skeleton.setVelocity(0, 0);
+      return;
+    }
+
+    const distance = Phaser.Math.Distance.Between(
+      skeleton.x,
+      skeleton.y,
+      this.personagemLocal.x,
+      this.personagemLocal.y
+    );
+    const angle = Phaser.Math.RadToDeg(
+      Phaser.Math.Angle.Between(
+        skeleton.x,
+        skeleton.y,
+        this.personagemLocal.x,
+        this.personagemLocal.y
+      )
+    );
+    let direcaoParaPlayer = "frente";
+    if (angle > -45 && angle <= 45) direcaoParaPlayer = "direita";
+    else if (angle > 45 && angle <= 135) direcaoParaPlayer = "frente";
+    else if (angle > 135 || angle <= -135) direcaoParaPlayer = "esquerda";
+    else if (angle > -135 && angle <= -45) direcaoParaPlayer = "tras";
+
+    const skeletonSpeed = this.speed * 0.5;
+    this.physics.moveToObject(skeleton, this.personagemLocal, skeletonSpeed);
+    skeleton.anims.play(`skeleton-andando-${direcaoParaPlayer}`, true);
+  }
+
+  /**
+   * Função de callback para quando o personagem e um esqueleto se sobrepõem (overlap).
+   * @param {Phaser.GameObjects.Sprite} player O objeto do jogador.
+   * @param {Phaser.GameObjects.Sprite} skeleton O objeto do esqueleto.
+   */
+  handlePlayerSkeletonOverlap(player, skeleton) {
+    if (
+      skeleton.active &&
+      player.active &&
+      !skeleton.hasOwnProperty("lastAttackTime")
+    ) {
+      skeleton.lastAttackTime = 0;
+    }
+
+    if (
+      skeleton.active &&
+      player.active &&
+      this.time.now > skeleton.lastAttackTime + 500
+    ) {
+      this.receberDano(player, 5);
+      skeleton.lastAttackTime = this.time.now;
+    }
+  }
+
+  update() {
+
+    if (
+      this.sunyActive &&
+      this.personagemLocal.vidaAtual > 0 &&
+      this.controleScene &&
+      this.controleScene.joystickData
+    ) {
+      const joystickData = this.controleScene.joystickData;
+      const force = joystickData.force;
+      const angleRad = joystickData.rad;
+
+      if (force > this.threshold) {
+        const velocityX = Math.cos(angleRad) * this.speed;
+        const velocityY = Math.sin(angleRad) * this.speed;
+        this.personagemLocal.setVelocity(velocityX, velocityY);
+        const angleDeg = joystickData.angle;
+        if (angleDeg > -45 && angleDeg <= 45) {
+          this.personagemLocal.anims.play("personagem-andando-direita", true);
+          this.direcaoAtual = "direita";
+        } else if (angleDeg > 45 && angleDeg <= 135) {
+          this.personagemLocal.anims.play("personagem-andando-frente", true);
+          this.direcaoAtual = "frente";
+        } else if (angleDeg > 135 || angleDeg <= -135) {
+          this.personagemLocal.anims.play("personagem-andando-esquerda", true);
+          this.direcaoAtual = "esquerda";
+        } else if (angleDeg > -135 && angleDeg <= -45) {
+          this.personagemLocal.anims.play("personagem-andando-tras", true);
+          this.direcaoAtual = "tras";
+        }
+      } else {
+        this.personagemLocal.setVelocity(0);
+        if (this.direcaoAtual === "direita")
+          this.personagemLocal.anims.stop("personagem-andando-direita");
+        else if (this.direcaoAtual === "esquerda")
+          this.personagemLocal.anims.stop("personagem-andando-esquerda");
+        else if (this.direcaoAtual === "frente")
+          this.personagemLocal.anims.play("personagem-parado-frente", true);
+        else if (this.direcaoAtual === "tras")
+          this.personagemLocal.anims.stop("personagem-andando-tras");
+      }
+    } else if (this.personagemLocal.vidaAtual <= 0) {
+      this.personagemLocal.setVelocity(0);
+    }
+
+    if (this.nephisActive && this.nephisLocal.vidaAtual > 0) {
+      let nephisVelocityX = 0;
+      let nephisVelocityY = 0;
+      let isMoving = false;
+
+      if (this.nephisKeys.left.isDown) {
+        nephisVelocityX = -this.nephisSpeed;
+        this.nephisDirecaoAtual = "esquerda";
+        isMoving = true;
+      } else if (this.nephisKeys.right.isDown) {
+        nephisVelocityX = this.nephisSpeed;
+        this.nephisDirecaoAtual = "direita";
+        isMoving = true;
+      }
+
+      if (this.nephisKeys.up.isDown) {
+        nephisVelocityY = -this.nephisSpeed;
+        this.nephisDirecaoAtual = "tras";
+        isMoving = true;
+      } else if (this.nephisKeys.down.isDown) {
+        nephisVelocityY = this.nephisSpeed;
+        this.nephisDirecaoAtual = "frente";
+        isMoving = true;
+      }
+
+      this.nephisLocal.setVelocity(nephisVelocityX, nephisVelocityY);
+
+      if (isMoving) {
+        this.nephisLocal.anims.play(
+          `nephis-andando-${this.nephisDirecaoAtual}`,
+          true
+        );
+      } else {
+        this.nephisLocal.setVelocity(0);
+        if (this.nephisDirecaoAtual === "direita")
+          this.nephisLocal.anims.stop("nephis-andando-direita");
+        else if (this.nephisDirecaoAtual === "esquerda")
+          this.nephisLocal.anims.stop("nephis-andando-esquerda");
+        else if (this.nephisDirecaoAtual === "frente")
+          this.nephisLocal.anims.play("nephis-parado-frente", true);
+        else if (this.nephisDirecaoAtual === "tras")
+          this.nephisLocal.anims.stop("nephis-andando-tras");
+      }
+    } else if (this.nephisLocal.vidaAtual <= 0) {
+      this.nephisLocal.setVelocity(0);
+    }
+
+    this.atualizarBarraVida(this.personagemLocal);
+    this.atualizarBarraVida(this.nephisLocal);
+
+    if (this.enemies) {
+      this.enemies.getChildren().forEach((enemy) => {
+        this.atualizarBarraVida(enemy);
+        this.gerenciarIAEsqueleto(enemy);
+      });
+    }
+
+    if (this.jogadoresInfo) {
+      Object.values(this.jogadoresInfo).forEach((jogadorInfo) => {
+        if (jogadorInfo.id !== this.socket.id) {
+
+          const sprite = this.physics.add.sprite(
+            jogadorInfo.x,
+            jogadorInfo.y,
+            jogadorInfo.personagem
+          );
+          sprite.setCollideWorldBounds(true);
+          sprite.vidaMaxima = 200;
+          sprite.vidaAtual = 200;
+          sprite.healthBar = this.criarBarraDeVida();
+          sprite.setDepth(2.5);
+          this.outrosJogadores[jogadorInfo.id] = sprite;
+          this.physics.add.collider(sprite, [
+            camadaArvore,
+            camadaMontanha,
+            camadaMontanha2,
+          ]);
+          this.physics.add.overlap(
+            sprite,
+            this.enemies,
+            this.handlePlayerSkeletonOverlap,
+            null,
+            this
+          );
+        }
+      });
+    }
+
+    if (this.socket) {
+      this.socket.on("outro-jogador-atualizado", (jogadorInfo) => {
+        const outro = this.outrosJogadores[jogadorInfo.id];
+        if (outro) {
+          outro.setPosition(jogadorInfo.x, jogadorInfo.y);
+          outro.anims.play(jogadorInfo.anim, true);
+          outro.vidaAtual = jogadorInfo.vida;
+        }
+      });
+
+      this.socket.on("jogador-desconectado", (jogadorId) => {
+        if (this.outrosJogadores[jogadorId]) {
+          this.outrosJogadores[jogadorId].destroy();
+          delete this.outrosJogadores[jogadorId];
+        }
+      });
+    }
+
+    if (this.socket && this.personagemLocal) {
+      this.socket.emit("atualizacao-jogador", {
+        id: this.socket.id,
+        x: this.personagemLocal.x,
+        y: this.personagemLocal.y,
+        vida: this.personagemLocal.vidaAtual,
+        anim: this.personagemLocal.anims.currentAnim?.key,
+        personagem: this.sunyActive ? "suny" : "nephis",
+      });
+    }
+
+    Object.values(this.outrosJogadores).forEach((jogador) => {
+      this.atualizarBarraVida(jogador);
+    });
   }
 }
