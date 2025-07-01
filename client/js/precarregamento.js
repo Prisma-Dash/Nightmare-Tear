@@ -36,6 +36,8 @@ export default class precarregamento extends Phaser.Scene {
     this.load.image("arvores1", "mapa/arvore1.png");
     this.load.image("lava", "mapa/chao_lava.png");
     this.load.image("full_screen", "UI/full_screen.png");
+    this.load.image('suny_morte', 'morte/suny_morte.png');
+    this.load.image('nephis_morte', 'morte/nephis_morte.png');
   }
 
   create() {

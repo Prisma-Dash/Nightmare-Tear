@@ -3,6 +3,7 @@ import abertura from "./abertura.js";
 import precarregamento from "./precarregamento.js";
 import sala from "./sala.js";
 import fase1 from "./fase1.js";
+import Win from "./win.js";
 import final from "./final.js";
 import morte from "./morte.js";
 import controle from "./controle.js";

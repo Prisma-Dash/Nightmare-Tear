@@ -13,6 +13,7 @@ io.on("connection", (socket) => {
   console.log(`[Servidor] Usuário conectado: ${socket.id}`);
 
   socket.on("entrar-na-sala", (salaId) => {
+    // Gerenciamento de salas e jogadores
     if (!salasAtivas[salaId]) {
       salasAtivas[salaId] = {
         id: salaId,
@@ -21,7 +22,6 @@ io.on("connection", (socket) => {
     }
 
     const sala = salasAtivas[salaId];
-
 
     if (Object.keys(sala.jogadores).length >= 2) {
       socket.emit("sala-cheia");
@@ -35,6 +35,7 @@ io.on("connection", (socket) => {
     const personagensUsados = Object.values(sala.jogadores).map(
       (j) => j.personagem
     );
+
     if (!personagensUsados.includes("suny")) {
       personagem = "suny";
     } else {
@@ -52,13 +53,28 @@ io.on("connection", (socket) => {
     };
 
     sala.jogadores[socket.id] = novoJogador;
+    socket.emit("estadoDaSala", sala.jogadores);
+    socket.to(salaId).emit("novoJogadorNaSala", novoJogador);
 
-    const numJogadores = Object.keys(sala.jogadores).length;
     console.log(
-      `[Servidor] Jogador ${socket.id} (${personagem}) entrou na sala ${salaId}. Total: ${numJogadores}`
+      `[Servidor] Jogador ${
+        socket.id
+      } (${personagem}) entrou na sala ${salaId}. Total: ${
+        Object.keys(sala.jogadores).length
+      }`
     );
 
-    if (numJogadores === 2) {
+    // WebRTC: envia lista de jogadores para a sala
+    const jogadoresNaSala = Array.from(
+      io.sockets.adapter.rooms.get(salaId) || []
+    );
+    let jogadores = {
+      primeiro: jogadoresNaSala[0],
+      segundo: jogadoresNaSala[1] || null,
+    };
+    io.to(salaId).emit("jogadores", jogadores);
+
+    if (Object.keys(sala.jogadores).length === 2) {
       console.log(
         `[Servidor] Sala ${salaId} completa. Enviando 'iniciar-jogo'.`
       );
@@ -75,6 +91,27 @@ io.on("connection", (socket) => {
     ) {
       salasAtivas[salaId].jogadores[socket.id] = dados;
       socket.to(salaId).emit("outro-jogador-atualizado", dados);
+    }
+  });
+
+  // WebRTC handlers
+  socket.on("offer", (salaId, description) => {
+    socket.to(salaId).emit("offer", description);
+  });
+  socket.on("answer", (salaId, description) => {
+    socket.to(salaId).emit("answer", description);
+  });
+  socket.on("candidate", (salaId, candidate) => {
+    socket.to(salaId).emit("candidate", candidate);
+  });
+
+  // MODIFICADO: O listener agora recebe dados e os retransmite
+  socket.on("jogador-morreu", (data) => {
+    // 'data' contém { personagem: 'suny' } ou { personagem: 'nephis' }
+    const salaId = socket.salaId;
+    if (salaId && salasAtivas[salaId]) {
+      // Envia para todos na sala, exceto o jogador que morreu
+      socket.to(salaId).emit("jogador-morreu", data);
     }
   });
 
@@ -96,6 +133,7 @@ io.on("connection", (socket) => {
         console.log(`[Servidor] Sala ${salaId} vazia e removida.`);
       }
     }
+    console.log(`[Servidor] Usuário ${socket.id} desconectado do servidor`);
   });
 });
 

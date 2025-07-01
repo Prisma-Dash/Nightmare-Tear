@@ -38,23 +38,20 @@ export default class fase1 extends Phaser.Scene {
   }
 
   init(data) {
-    if (data && data.playerCharacter) {
-      this.assignedCharacter = data.playerCharacter;
-      this.currentRoomNumber = data.roomNumber;
-      console.log(
-        `Fase1: Personagem atribuído: ${this.assignedCharacter} na sala: ${this.currentRoomNumber}`
-      );
-      if (this.assignedCharacter === "suny") {
-        this.sunyActive = true;
-        this.nephisActive = false;
-      } else if (this.assignedCharacter === "nephis") {
-        this.nephisActive = true;
-        this.sunyActive = false;
+    if (data && data.jogadores) {
+      this.jogadoresInfo = data.jogadores;
+
+      const meuSocketId = this.game.socket.id;
+      const meuJogador = this.jogadoresInfo[meuSocketId];
+
+      if (meuJogador) {
+        this.assignedCharacter = meuJogador.personagem;
+        this.currentRoomNumber = meuJogador.salaId || 1;
+        this.sunyActive = this.assignedCharacter === "suny";
+        this.nephisActive = this.assignedCharacter === "nephis";
       }
     } else {
-      console.warn(
-        "Fase1: Nenhuma atribuição de personagem ou sala recebida. Atribuindo Suny e sala 1 por padrão para testes diretos."
-      );
+      // fallback para testes
       this.assignedCharacter = "suny";
       this.currentRoomNumber = 1;
       this.sunyActive = true;
@@ -146,6 +143,10 @@ export default class fase1 extends Phaser.Scene {
 
     this.nephisLocal.setVisible(this.nephisActive);
     this.nephisLocal.body.enable = this.nephisActive;
+
+    this.meuPersonagem = this.sunyActive
+      ? this.personagemLocal
+      : this.nephisLocal;
 
     camadaArvore.setCollisionByProperty({ collider: true });
     camadaMontanha.setCollisionByProperty({ collider: true });
@@ -277,6 +278,61 @@ export default class fase1 extends Phaser.Scene {
         this.scale.startFullscreen();
       }
     });
+
+    if (this.game.socket) {
+      this.game.socket.off("estadoDaSala");
+      this.game.socket.off("novoJogadorNaSala");
+      this.game.socket.off("outro-jogador-atualizado");
+      this.game.socket.off("jogador-desconectado");
+
+      this.game.socket.on("estadoDaSala", (jogadoresNaSala) => {
+        Object.values(jogadoresNaSala).forEach((jogadorInfo) => {
+          if (jogadorInfo.id === this.game.socket.id) {
+            this.assignedCharacter = jogadorInfo.personagem;
+            this.criarJogadorLocal(jogadorInfo);
+          } else {
+            this.criarOutroJogador(jogadorInfo);
+          }
+        });
+      });
+
+      this.game.socket.on("novoJogadorNaSala", (jogadorInfo) => {
+        if (jogadorInfo.id !== this.game.socket.id) {
+          this.criarOutroJogador(jogadorInfo);
+        }
+      });
+
+      this.game.socket.on("outro-jogador-atualizado", (jogadorInfo) => {
+        const outro = this.outrosJogadores[jogadorInfo.id];
+        if (outro) {
+          outro.setPosition(jogadorInfo.x, jogadorInfo.y);
+          outro.anims.play(jogadorInfo.anim, true);
+          outro.vidaAtual = jogadorInfo.vida;
+        }
+      });
+
+      this.game.socket.on("jogador-desconectado", (jogadorId) => {
+        if (this.outrosJogadores[jogadorId]) {
+          this.outrosJogadores[jogadorId].destroy();
+          delete this.outrosJogadores[jogadorId];
+        }
+      });
+    }
+
+    this.game.events.off("hidden", this.game.loop.sleep, this.game.loop);
+    this.game.events.off("visible", this.game.loop.wake, this.game.loop);
+
+    if (this.jogadoresInfo) {
+      Object.values(this.jogadoresInfo).forEach((jogadorInfo) => {
+        if (
+          jogadorInfo &&
+          jogadorInfo.id &&
+          jogadorInfo.id !== this.game.socket.id
+        ) {
+          this.criarOutroJogador(jogadorInfo);
+        }
+      });
+    }
   }
 
   criarBarraDeVida() {
@@ -350,21 +406,22 @@ export default class fase1 extends Phaser.Scene {
       console.log(`${personagem.texture.key} morreu!`);
       personagem.setTint(0xff0000);
 
-      if (
-        personagem === this.personagemLocal ||
-        personagem === this.nephisLocal
-      ) {
+      // Só o cliente do personagem morto avisa o servidor
+      if (personagem === this.meuPersonagem) {
         this.physics.world.pause();
-
         if (
           this.controleScene &&
           typeof this.controleScene.hideJoystick === "function"
         ) {
           this.controleScene.hideJoystick();
         }
+        if (this.game.socket) {
+          this.game.socket.emit("jogador-morreu", {
+            personagem: this.assignedCharacter,
+          });
+        }
 
         let deathAnimationKey = "";
-
         if (personagem === this.personagemLocal) {
           deathAnimationKey = "personagem-morte";
         } else if (personagem === this.nephisLocal) {
@@ -373,27 +430,24 @@ export default class fase1 extends Phaser.Scene {
 
         personagem.anims.play(deathAnimationKey, true);
 
-        personagem.once("animationcomplete", () => {
-          personagem.anims.stop();
+        const playerData = {
+          x: personagem.x,
+          y: personagem.y,
+          frame: 209,
+          tint: personagem.tintTopLeft,
+          isSuny: personagem === this.personagemLocal,
+        };
 
-          const playerData = {
-            x: personagem.x,
-            y: personagem.y,
-            frame: 209,
-            tint: personagem.tintTopLeft,
-            isSuny: personagem === this.personagemLocal,
-          };
-
-          this.time.delayedCall(
-            2000,
-            () => {
-              this.scene.stop("fase1");
-              this.scene.start("morte", { playerData: playerData });
-            },
-            [],
-            this
-          );
-        });
+        // Aguarda 2.5 segundos e transiciona para a cena de morte
+        this.time.delayedCall(
+          2500,
+          () => {
+            this.scene.stop("fase1");
+            this.scene.start("morte", { playerData: playerData });
+          },
+          [],
+          this
+        );
       } else {
         personagem.anims.stop();
         if (personagem.texture.key === "mob_skeleton") {
@@ -640,95 +694,45 @@ export default class fase1 extends Phaser.Scene {
   }
 
   update() {
-
+    // Controle unificado para Suny e Nephis
     if (
-      this.sunyActive &&
-      this.personagemLocal.vidaAtual > 0 &&
+      this.meuPersonagem &&
+      this.meuPersonagem.vidaAtual > 0 &&
       this.controleScene &&
       this.controleScene.joystickData
     ) {
       const joystickData = this.controleScene.joystickData;
       const force = joystickData.force;
       const angleRad = joystickData.rad;
-
+      let animacao = null;
       if (force > this.threshold) {
         const velocityX = Math.cos(angleRad) * this.speed;
         const velocityY = Math.sin(angleRad) * this.speed;
-        this.personagemLocal.setVelocity(velocityX, velocityY);
+        this.meuPersonagem.setVelocity(velocityX, velocityY);
         const angleDeg = joystickData.angle;
         if (angleDeg > -45 && angleDeg <= 45) {
-          this.personagemLocal.anims.play("personagem-andando-direita", true);
           this.direcaoAtual = "direita";
+          animacao = `${this.assignedCharacter}-andando-direita`;
         } else if (angleDeg > 45 && angleDeg <= 135) {
-          this.personagemLocal.anims.play("personagem-andando-frente", true);
           this.direcaoAtual = "frente";
+          animacao = `${this.assignedCharacter}-andando-frente`;
         } else if (angleDeg > 135 || angleDeg <= -135) {
-          this.personagemLocal.anims.play("personagem-andando-esquerda", true);
           this.direcaoAtual = "esquerda";
+          animacao = `${this.assignedCharacter}-andando-esquerda`;
         } else if (angleDeg > -135 && angleDeg <= -45) {
-          this.personagemLocal.anims.play("personagem-andando-tras", true);
           this.direcaoAtual = "tras";
+          animacao = `${this.assignedCharacter}-andando-tras`;
         }
+        if (animacao) this.meuPersonagem.anims.play(animacao, true);
       } else {
-        this.personagemLocal.setVelocity(0);
-        if (this.direcaoAtual === "direita")
-          this.personagemLocal.anims.stop("personagem-andando-direita");
-        else if (this.direcaoAtual === "esquerda")
-          this.personagemLocal.anims.stop("personagem-andando-esquerda");
-        else if (this.direcaoAtual === "frente")
-          this.personagemLocal.anims.play("personagem-parado-frente", true);
-        else if (this.direcaoAtual === "tras")
-          this.personagemLocal.anims.stop("personagem-andando-tras");
-      }
-    } else if (this.personagemLocal.vidaAtual <= 0) {
-      this.personagemLocal.setVelocity(0);
-    }
-
-    if (this.nephisActive && this.nephisLocal.vidaAtual > 0) {
-      let nephisVelocityX = 0;
-      let nephisVelocityY = 0;
-      let isMoving = false;
-
-      if (this.nephisKeys.left.isDown) {
-        nephisVelocityX = -this.nephisSpeed;
-        this.nephisDirecaoAtual = "esquerda";
-        isMoving = true;
-      } else if (this.nephisKeys.right.isDown) {
-        nephisVelocityX = this.nephisSpeed;
-        this.nephisDirecaoAtual = "direita";
-        isMoving = true;
-      }
-
-      if (this.nephisKeys.up.isDown) {
-        nephisVelocityY = -this.nephisSpeed;
-        this.nephisDirecaoAtual = "tras";
-        isMoving = true;
-      } else if (this.nephisKeys.down.isDown) {
-        nephisVelocityY = this.nephisSpeed;
-        this.nephisDirecaoAtual = "frente";
-        isMoving = true;
-      }
-
-      this.nephisLocal.setVelocity(nephisVelocityX, nephisVelocityY);
-
-      if (isMoving) {
-        this.nephisLocal.anims.play(
-          `nephis-andando-${this.nephisDirecaoAtual}`,
+        this.meuPersonagem.setVelocity(0);
+        this.meuPersonagem.anims.play(
+          `${this.assignedCharacter}-parado-frente`,
           true
         );
-      } else {
-        this.nephisLocal.setVelocity(0);
-        if (this.nephisDirecaoAtual === "direita")
-          this.nephisLocal.anims.stop("nephis-andando-direita");
-        else if (this.nephisDirecaoAtual === "esquerda")
-          this.nephisLocal.anims.stop("nephis-andando-esquerda");
-        else if (this.nephisDirecaoAtual === "frente")
-          this.nephisLocal.anims.play("nephis-parado-frente", true);
-        else if (this.nephisDirecaoAtual === "tras")
-          this.nephisLocal.anims.stop("nephis-andando-tras");
       }
-    } else if (this.nephisLocal.vidaAtual <= 0) {
-      this.nephisLocal.setVelocity(0);
+    } else if (this.meuPersonagem && this.meuPersonagem.vidaAtual <= 0) {
+      this.meuPersonagem.setVelocity(0);
     }
 
     this.atualizarBarraVida(this.personagemLocal);
@@ -741,68 +745,30 @@ export default class fase1 extends Phaser.Scene {
       });
     }
 
-    if (this.jogadoresInfo) {
-      Object.values(this.jogadoresInfo).forEach((jogadorInfo) => {
-        if (jogadorInfo.id !== this.socket.id) {
-
-          const sprite = this.physics.add.sprite(
-            jogadorInfo.x,
-            jogadorInfo.y,
-            jogadorInfo.personagem
-          );
-          sprite.setCollideWorldBounds(true);
-          sprite.vidaMaxima = 200;
-          sprite.vidaAtual = 200;
-          sprite.healthBar = this.criarBarraDeVida();
-          sprite.setDepth(2.5);
-          this.outrosJogadores[jogadorInfo.id] = sprite;
-          this.physics.add.collider(sprite, [
-            camadaArvore,
-            camadaMontanha,
-            camadaMontanha2,
-          ]);
-          this.physics.add.overlap(
-            sprite,
-            this.enemies,
-            this.handlePlayerSkeletonOverlap,
-            null,
-            this
-          );
-        }
-      });
-    }
-
-    if (this.socket) {
-      this.socket.on("outro-jogador-atualizado", (jogadorInfo) => {
-        const outro = this.outrosJogadores[jogadorInfo.id];
-        if (outro) {
-          outro.setPosition(jogadorInfo.x, jogadorInfo.y);
-          outro.anims.play(jogadorInfo.anim, true);
-          outro.vidaAtual = jogadorInfo.vida;
-        }
-      });
-
-      this.socket.on("jogador-desconectado", (jogadorId) => {
-        if (this.outrosJogadores[jogadorId]) {
-          this.outrosJogadores[jogadorId].destroy();
-          delete this.outrosJogadores[jogadorId];
-        }
-      });
-    }
-
-    if (this.socket && this.personagemLocal) {
-      this.socket.emit("atualizacao-jogador", {
-        id: this.socket.id,
-        x: this.personagemLocal.x,
-        y: this.personagemLocal.y,
-        vida: this.personagemLocal.vidaAtual,
-        anim: this.personagemLocal.anims.currentAnim?.key,
-        personagem: this.sunyActive ? "suny" : "nephis",
+    if (this.game.socket && this.meuPersonagem) {
+      this.game.socket.emit("atualizacao-jogador", {
+        id: this.game.socket.id,
+        x: this.meuPersonagem.x,
+        y: this.meuPersonagem.y,
+        vida: this.meuPersonagem.vidaAtual,
+        anim: this.meuPersonagem.anims.currentAnim?.key,
+        personagem: this.assignedCharacter,
       });
     }
 
     Object.values(this.outrosJogadores).forEach((jogador) => {
       this.atualizarBarraVida(jogador);
     });
+  }
+
+  criarOutroJogador(info) {
+    const outro = this.physics.add.sprite(info.x, info.y, info.personagem);
+    outro.setCollideWorldBounds(true);
+    outro.vidaMaxima = 200;
+    outro.vidaAtual = info.vida || 200;
+    outro.anims.play(info.anim || `${info.personagem}-parado-frente`);
+    outro.healthBar = this.criarBarraDeVida();
+    outro.setDepth(2.5);
+    this.outrosJogadores[info.id] = outro;
   }
 }

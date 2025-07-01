@@ -1,14 +1,13 @@
 export default class sala extends Phaser.Scene {
   constructor() {
     super("sala");
-    this.socket = null;
     this.statusText = null;
     this.roomButtons = [];
   }
 
   init() {
-    this.socket = window.game.socket;
-    if (!this.socket) {
+    // Não precisamos mais definir this.socket aqui, vamos usar this.game.socket diretamente.
+    if (!this.game.socket) {
       console.error("Socket não encontrado.");
     }
   }
@@ -18,7 +17,7 @@ export default class sala extends Phaser.Scene {
   }
 
   create() {
-    this.socket.removeAllListeners();
+    this.game.socket.removeAllListeners();
 
     const largura = this.cameras.main.width;
     const altura = this.cameras.main.height;
@@ -36,14 +35,14 @@ export default class sala extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(1);
 
-    if (!this.socket.connected) {
+    if (!this.game.socket.connected) {
       this.statusText.setText(
         "Erro: Não foi possível conectar. Tente recarregar a página."
       );
       return;
     }
 
-    this.socket.on("iniciar-jogo", (jogadores) => {
+    this.game.socket.on("iniciar-jogo", (jogadores) => {
       this.statusText.setText("Jogador 2 encontrado! Iniciando...");
       this.time.delayedCall(1500, () => {
         this.scene.start("fase1", { jogadores });
@@ -105,7 +104,6 @@ export default class sala extends Phaser.Scene {
         borderRadius - 4
       );
 
-
       const buttonText = this.add
         .text(buttonX, buttonY, `Sala ${roomNumber}`, {
           fontSize: "24px",
@@ -117,7 +115,7 @@ export default class sala extends Phaser.Scene {
         this.statusText.setText(
           `Entrando na Sala ${roomNumber}... Esperando jogador 2.`
         );
-        this.socket.emit("entrar-na-sala", roomNumber);
+        this.game.socket.emit("entrar-na-sala", roomNumber);
 
         this.roomButtons.forEach((zone) => zone.disableInteractive());
       });
@@ -181,7 +179,7 @@ export default class sala extends Phaser.Scene {
       this.roomButtons.push(zone);
     }
 
-    this.socket.on("sala-cheia", () => {
+    this.game.socket.on("sala-cheia", () => {
       this.statusText.setText("A sala escolhida está cheia. Tente outra.");
       this.roomButtons.forEach((zone) => zone.setInteractive());
     });
