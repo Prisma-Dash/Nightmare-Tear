@@ -13,7 +13,6 @@ io.on("connection", (socket) => {
   console.log(`[Servidor] Usuário conectado: ${socket.id}`);
 
   socket.on("entrar-na-sala", (salaId) => {
-    // Gerenciamento de salas e jogadores
     if (!salasAtivas[salaId]) {
       salasAtivas[salaId] = {
         id: salaId,
@@ -64,7 +63,6 @@ io.on("connection", (socket) => {
       }`
     );
 
-    // WebRTC: envia lista de jogadores para a sala
     const jogadoresNaSala = Array.from(
       io.sockets.adapter.rooms.get(salaId) || []
     );
@@ -94,7 +92,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // WebRTC handlers
   socket.on("offer", (salaId, description) => {
     socket.to(salaId).emit("offer", description);
   });
@@ -105,12 +102,9 @@ io.on("connection", (socket) => {
     socket.to(salaId).emit("candidate", candidate);
   });
 
-  // MODIFICADO: O listener agora recebe dados e os retransmite
   socket.on("jogador-morreu", (data) => {
-    // 'data' contém { personagem: 'suny' } ou { personagem: 'nephis' }
     const salaId = socket.salaId;
     if (salaId && salasAtivas[salaId]) {
-      // Envia para todos na sala, exceto o jogador que morreu
       socket.to(salaId).emit("jogador-morreu", data);
     }
   });
@@ -135,6 +129,8 @@ io.on("connection", (socket) => {
     }
     console.log(`[Servidor] Usuário ${socket.id} desconectado do servidor`);
   });
+  
+  socket.emit("sair-da-sala");
 });
 
 server.listen(port, "0.0.0.0", () => {
