@@ -26,8 +26,6 @@ export default class morte extends Phaser.Scene {
       frameHeight: 64,
     });
 
-    // As imagens já foram pré-carregadas na cena 'precarregamento'
-    // Apenas por garantia, caso a cena seja acessada diretamente:
     this.load.image("suny_morte", "assets/morte/suny_morte.png");
     this.load.image("nephis_morte", "assets/morte/nephis_morte.png");
   }
@@ -66,14 +64,11 @@ export default class morte extends Phaser.Scene {
       ease: "Power2",
     });
 
-    // --- LÓGICA PRINCIPAL DA CORREÇÃO ---
-    // Determina qual imagem de morte usar com base nos dados recebidos.
     const imagemMorteKey =
       this.playerFromFase1Data && !this.playerFromFase1Data.isSuny
         ? "nephis_morte"
         : "suny_morte";
 
-    // Usa a variável 'imagemMorteKey' em vez de um valor fixo.
     const mensagemMorte = this.add
       .image(largura / 2, altura * 0.25, imagemMorteKey)
       .setAlpha(0)
@@ -94,6 +89,9 @@ export default class morte extends Phaser.Scene {
       .setDepth(100);
 
     botaoHome.on("pointerdown", () => {
+      if (this.game && this.game.socket) {
+        this.game.socket.emit("sair-da-sala");
+      }
       this.tweens.add({
         targets: [
           this.blackOverlay,

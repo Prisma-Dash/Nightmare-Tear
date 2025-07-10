@@ -37,8 +37,8 @@ export default class controle extends Phaser.Scene {
     const baseCircle = this.add.circle(0, 0, 50, 0x888888, 0.5);
     const thumbCircle = this.add.circle(0, 0, 25, 0xcccccc, 0.7);
 
-    baseCircle.setScrollFactor(0).setDepth(1000);
-    thumbCircle.setScrollFactor(0).setDepth(1001);
+    baseCircle.setScrollFactor(0).setDepth(500); // REDUZIDO: Era 1000, agora 500
+    thumbCircle.setScrollFactor(0).setDepth(501); // REDUZIDO: Era 1001, agora 501
 
     this.joystick = joystickPlugin
       .add(this, {

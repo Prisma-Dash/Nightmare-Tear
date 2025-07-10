@@ -37,8 +37,11 @@ io.on("connection", (socket) => {
 
     if (!personagensUsados.includes("suny")) {
       personagem = "suny";
-    } else {
+    } else if (!personagensUsados.includes("nephis")) {
       personagem = "nephis";
+    } else {
+      socket.emit("sala-cheia"); // Caso ambos os personagens já estejam em uso
+      return;
     }
 
     const novoJogador = {
@@ -56,22 +59,13 @@ io.on("connection", (socket) => {
     socket.to(salaId).emit("novoJogadorNaSala", novoJogador);
 
     console.log(
-      `[Servidor] Jogador ${
-        socket.id
-      } (${personagem}) entrou na sala ${salaId}. Total: ${
-        Object.keys(sala.jogadores).length
-      }`
+      `[Servidor] Jogador ${socket.id} (${personagem}) entrou na sala ${salaId}. Total: ${Object.keys(sala.jogadores).length}`
     );
 
-    const jogadoresNaSala = Array.from(
-      io.sockets.adapter.rooms.get(salaId) || []
-    );
-    let jogadores = {
-      primeiro: jogadoresNaSala[0],
-      segundo: jogadoresNaSala[1] || null,
-    };
-    io.to(salaId).emit("jogadores", jogadores);
+    // Notificar jogadores sobre a lista atual de jogadores na sala
+    io.to(salaId).emit("jogadores", Object.keys(sala.jogadores));
 
+    // Iniciar jogo apenas quando a sala estiver completa com 2 jogadores
     if (Object.keys(sala.jogadores).length === 2) {
       console.log(
         `[Servidor] Sala ${salaId} completa. Enviando 'iniciar-jogo'.`
@@ -80,6 +74,23 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Eventos de sinalização WebRTC - otimizados para melhor performance
+  socket.on("offer", (salaId, description) => {
+    console.log(`[WebRTC] Retransmitindo oferta para sala ${salaId}`);
+    socket.to(salaId).emit("offer", description);
+  });
+
+  socket.on("answer", (salaId, description) => {
+    console.log(`[WebRTC] Retransmitindo resposta para sala ${salaId}`);
+    socket.to(salaId).emit("answer", description);
+  });
+
+  socket.on("candidate", (salaId, candidate) => {
+    console.log(`[WebRTC] Retransmitindo candidato ICE para sala ${salaId}`);
+    socket.to(salaId).emit("candidate", candidate);
+  });
+
+  // Fallback para Socket.IO quando WebRTC não estiver disponível
   socket.on("atualizacao-jogador", (dados) => {
     const salaId = socket.salaId;
     if (
@@ -87,39 +98,65 @@ io.on("connection", (socket) => {
       salasAtivas[salaId] &&
       salasAtivas[salaId].jogadores[socket.id]
     ) {
+      // Atualizar estado local do servidor (para novos jogadores que entram)
       salasAtivas[salaId].jogadores[socket.id] = dados;
+
+      // Retransmitir apenas se necessário (fallback)
       socket.to(salaId).emit("outro-jogador-atualizado", dados);
     }
   });
 
-  socket.on("offer", (salaId, description) => {
-    socket.to(salaId).emit("offer", description);
-  });
-  socket.on("answer", (salaId, description) => {
-    socket.to(salaId).emit("answer", description);
-  });
-  socket.on("candidate", (salaId, candidate) => {
-    socket.to(salaId).emit("candidate", candidate);
+  // Sincronização de esqueletos
+  socket.on("skeleton-update", (dados) => {
+    const salaId = socket.salaId;
+    if (salaId) {
+      // Retransmitir estado do esqueleto para outros jogadores na sala
+      socket.to(salaId).emit("skeleton-sync", dados);
+    }
   });
 
   socket.on("jogador-morreu", (data) => {
     const salaId = socket.salaId;
     if (salaId && salasAtivas[salaId]) {
-      socket.to(salaId).emit("jogador-morreu", data);
+      console.log(`[MORTE] Jogador ${socket.id} morreu na sala ${salaId}. Personagem: ${data.personagem}`);
+      
+      // Notificar TODOS os jogadores da sala (incluindo o que morreu) sobre a morte
+      io.to(salaId).emit("jogador-morreu", {
+        ...data,
+        jogadorMortoId: socket.id,
+        timestamp: Date.now()
+      });
+      
+      // Aguardar um pouco e então resetar a sala
+      setTimeout(() => {
+        if (salasAtivas[salaId]) {
+          console.log(`[RESET] Resetando sala ${salaId} após morte`);
+          
+          // Resetar estado da sala
+          salasAtivas[salaId].jogadores = {};
+          salasAtivas[salaId].jogoIniciado = false;
+          
+          // Notificar todos os jogadores para resetar
+          io.to(salaId).emit("resetar-sala", {
+            motivo: "morte",
+            timestamp: Date.now()
+          });
+        }
+      }, 2000); // 2 segundos de delay para permitir animação de morte
     }
   });
 
-  socket.on("disconnect", () => {
+  socket.on("sair-da-sala", () => {
     const salaId = socket.salaId;
     if (
       salaId &&
       salasAtivas[salaId] &&
       salasAtivas[salaId].jogadores[socket.id]
     ) {
-      console.log(
-        `[Servidor] Jogador ${socket.id} desconectou da sala ${salaId}.`
-      );
+      console.log(`[Servidor] Jogador ${socket.id} saiu da sala ${salaId}.`);
       delete salasAtivas[salaId].jogadores[socket.id];
+      socket.leave(salaId);
+      socket.salaId = null;
       io.to(salaId).emit("jogador-desconectado", socket.id);
 
       if (Object.keys(salasAtivas[salaId].jogadores).length === 0) {
@@ -127,10 +164,28 @@ io.on("connection", (socket) => {
         console.log(`[Servidor] Sala ${salaId} vazia e removida.`);
       }
     }
+  });
+
+  socket.on("disconnect", () => {
+    const salaId = socket.salaId;
+    if (salaId && salasAtivas[salaId] && salasAtivas[salaId].jogadores[socket.id]) {
+      console.log(`[Servidor] Jogador ${socket.id} desconectou da sala ${salaId}.`);
+      delete salasAtivas[salaId].jogadores[socket.id];
+      io.to(salaId).emit("jogador-desconectado", socket.id);
+
+      // Se a sala não estiver vazia, resetar para os jogadores restantes
+      if (Object.keys(salasAtivas[salaId].jogadores).length > 0) {
+        console.log(`[Servidor] Resetando sala ${salaId} devido à desconexão de ${socket.id}.`);
+        io.to(salaId).emit("resetar-sala");
+        delete salasAtivas[salaId]; // Limpar a sala no servidor
+      } else {
+        // Se a sala ficar vazia, remover a sala
+        delete salasAtivas[salaId];
+        console.log(`[Servidor] Sala ${salaId} vazia e removida.`);
+      }
+    }
     console.log(`[Servidor] Usuário ${socket.id} desconectado do servidor`);
   });
-  
-  socket.emit("sair-da-sala");
 });
 
 server.listen(port, "0.0.0.0", () => {
