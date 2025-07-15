@@ -8,9 +8,13 @@ export default class abertura extends Phaser.Scene {
   preload() {
     this.load.image("fundo", "assets/abertura-fundo.png");
     this.load.image("botao", "assets/UI/botao-play.png");
+    this.load.audio("intro", "../assets/audio/intro.mp3");
   }
 
   create() {
+    const introMusic = this.sound.add("intro", { loop: true });
+    introMusic.play();
+
     const largura = this.cameras.main.width;
     const altura = this.cameras.main.height;
 
@@ -23,7 +27,7 @@ export default class abertura extends Phaser.Scene {
       .setScale(0.25)
       .setInteractive()
       .on("pointerdown", () => {
-    
+        this.sound.stopAll();
         this.scene.start("precarregamento");
       });
   }

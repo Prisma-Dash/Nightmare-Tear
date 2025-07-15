@@ -43,35 +43,32 @@ export default class sala extends Phaser.Scene {
 
     this.game.socket.on("iniciar-jogo", (jogadores) => {
       this.statusText.setText("Jogador 2 encontrado! Iniciando...");
-      
-      // Criar tela escura
-      const overlay = this.add.rectangle(
-        this.cameras.main.centerX,
-        this.cameras.main.centerY,
-        this.cameras.main.width,
-        this.cameras.main.height,
-        0x000000,
-        1
-      ).setDepth(1000);
 
-      // Texto que aparece letra por letra
+      const overlay = this.add
+        .rectangle(
+          this.cameras.main.centerX,
+          this.cameras.main.centerY,
+          this.cameras.main.width,
+          this.cameras.main.height,
+          0x000000,
+          1
+        )
+        .setDepth(1000);
+
       const fraseCompleta = "sobreviva e acorde...";
       let textoAtual = "";
       let indiceLetra = 0;
 
-      const textoAnimado = this.add.text(
-        this.cameras.main.centerX,
-        this.cameras.main.centerY,
-        "",
-        {
+      const textoAnimado = this.add
+        .text(this.cameras.main.centerX, this.cameras.main.centerY, "", {
           fontSize: "32px",
           fontFamily: "monospace",
           color: "#ffffff",
           fontStyle: "bold",
-        }
-      ).setOrigin(0.5).setDepth(1001);
+        })
+        .setOrigin(0.5)
+        .setDepth(1001);
 
-      // Função para adicionar letra por letra
       const adicionarLetra = () => {
         if (indiceLetra < fraseCompleta.length) {
           textoAtual += fraseCompleta[indiceLetra];
@@ -79,14 +76,13 @@ export default class sala extends Phaser.Scene {
           indiceLetra++;
           this.time.delayedCall(100, adicionarLetra);
         } else {
-          // Após terminar a frase, aguardar 2 segundos e iniciar o jogo
           this.time.delayedCall(2000, () => {
+            this.sound.stopAll();
             this.scene.start("fase1", { jogadores });
           });
         }
       };
 
-      // Iniciar a animação da frase
       this.time.delayedCall(500, adicionarLetra);
     });
 
@@ -157,7 +153,6 @@ export default class sala extends Phaser.Scene {
           `Entrando na Sala ${roomNumber}... Esperando jogador 2.`
         );
 
-        // Definir a sala no WebRTC Manager
         this.game.webRTCManager.setSalaId(roomNumber);
 
         this.game.socket.emit("entrar-na-sala", roomNumber);
@@ -230,8 +225,10 @@ export default class sala extends Phaser.Scene {
     });
 
     this.game.socket.on("resetar-sala", () => {
-      console.log("[Sala] Recebido comando para resetar sala. Reiniciando cena.");
-      this.scene.restart(); // Reinicia a cena 'sala' para permitir nova escolha de sala
+      console.log(
+        "[Sala] Recebido comando para resetar sala. Reiniciando cena."
+      );
+      this.scene.restart();
     });
   }
 }

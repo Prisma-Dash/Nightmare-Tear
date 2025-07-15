@@ -5,6 +5,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nightmare Tear</title>
+
+    <meta charset="UTF-8" />
+    <title>Nightmare Tear</title>
+    <meta name="author" content="Yuri Chan" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="application-name" content="Nightmare Tear" />
+    <meta name="apple-mobile-web-app-title" content="Nightmare Tear" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="msapplication-navbutton-color" content="#000000" />
+    <meta name="msapplication-starturl" content="./index.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+<link rel="manifest" href="./manifest.json" />
+<link rel="apple-touch-icon" sizes="128x128" href="./assets/logo/128.png" />
+
+<link rel="stylesheet" type="text/css" href="./main.css" />
+<script type="text/javascript">
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("./sw.js")
+        .then((reg) => console.info("Service worker registered: ", reg))
+        .catch((err) =>
+          console.error("Error registering service worker: ", err)
+        )
+    }
+  </script>
+
+
 </head>
 
 <body>

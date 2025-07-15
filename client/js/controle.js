@@ -90,5 +90,70 @@ export default class controle extends Phaser.Scene {
     if (this.joystickActive) {
       this.dumpJoyStickState();
     }
+
+    // Converte o ângulo do joy stick em coordenadas fixas
+
+    let o = 0;
+    if (this.joystick.angle < 0) {
+      o = ((this.joystick.angle % 360) + 360) % 360;
+    } else {
+      o = this.joystick.angle;
+    }
+    const closest = (arr, n) =>
+      arr.sort((a, b) => Math.abs(a - n) - Math.abs(b - n))[0];
+    this.direcao = closest([0, 45, 90, 135, 180, 225, 270, 315, 360], o);
+
+    // Usa as coordenadas para tocar animação
+
+    switch (this.direcao) {
+      case 0:
+        this.personagemLocal.anims.play("personagem-andando-direita", true);
+        this.direcaoAtual = "direita";
+        break;
+      case 45:
+        this.personagemLocal.anims.play(
+          "personagem-andando-baixo-direita",
+          true
+        );
+        this.direcaoAtual = "baixo-direita";
+        break;
+      case 90:
+        this.personagemLocal.anims.play("personagem-andando-baixo", true);
+        this.direcaoAtual = "baixo";
+        break;
+      case 135:
+        this.personagemLocal.anims.play(
+          "personagem-andando-baixo-esquerda",
+          true
+        );
+        this.direcaoAtual = "baixo-esquerda";
+        break;
+      case 180:
+        this.personagemLocal.anims.play("personagem-andando-esquerda", true);
+        this.direcaoAtual = "esquerda";
+        break;
+      case 225:
+        this.personagemLocal.anims.play(
+          "personagem-andando-cima-esquerda",
+          true
+        );
+        this.direcaoAtual = "cima-esquerda";
+        break;
+      case 270:
+        this.personagemLocal.anims.play("personagem-andando-cima", true);
+        this.direcaoAtual = "cima";
+        break;
+      case 315:
+        this.personagemLocal.anims.play(
+          "personagem-andando-cima-direita",
+          true
+        );
+        this.direcaoAtual = "cima-direita";
+        break;
+      case 360:
+        this.personagemLocal.anims.play("personagem-andando-direita", true);
+        this.direcaoAtual = "direita";
+        break;
+    }
   }
 }

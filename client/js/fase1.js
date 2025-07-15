@@ -3,14 +3,14 @@ export default class fase1 extends Phaser.Scene {
     super("fase1");
 
     this.threshold = 0.1;
-    this.speed = 150;
+    this.speed = 350;
     this.direcaoAtual = "frente";
     this.personagemLocal = null;
     this.controleScene = null;
     this.sunyActive = false;
 
     this.nephisLocal = null;
-    this.nephisSpeed = 150;
+    this.nephisSpeed = 350;
     this.nephisDirecaoAtual = "frente";
     this.nephisKeys = null;
     this.nephisActive = false;
@@ -49,14 +49,15 @@ export default class fase1 extends Phaser.Scene {
       },
     };
 
+    // Controlo de quem deu dano aos esqueletos
     this.skeletonDamageDealt = {};
 
-
+    // Otimização de performance
     this.lastUpdateTime = 0;
     this.updateInterval = 16; // ~60 FPS
 
-
-    this.gameTimer = 100; // 5 minutos em segundos
+    // Sistema de timer e pontuação
+    this.gameTimer = 120; // 5 minutos em segundos
     this.timerText = null;
     this.score = 0;
     this.scoreText = null;
@@ -479,7 +480,8 @@ export default class fase1 extends Phaser.Scene {
 
       this.game.socket.on("resetar-sala", (data) => {
         console.log(
-          `[Fase1] Recebido comando para resetar sala. Motivo: ${data?.motivo || "desconhecido"
+          `[Fase1] Recebido comando para resetar sala. Motivo: ${
+            data?.motivo || "desconhecido"
           }`
         );
 
@@ -707,7 +709,7 @@ export default class fase1 extends Phaser.Scene {
             personagem.id || `skeleton_${personagem.x}_${personagem.y}`;
           if (this.skeletonDamageDealt[skeletonId] > 0) {
             this.ganharXP(25);
-            this.adicionarPontos(10);
+            this.adicionarPontos(10); // Adicionar 10 pontos por skeleton morto
           }
 
           delete this.skeletonDamageDealt[skeletonId];
@@ -934,25 +936,25 @@ export default class fase1 extends Phaser.Scene {
   criarAnimacoesPersonagem() {
     this.anims.create({
       key: "suny-andando-direita",
-      frames: this.anims.generateFrameNumbers("suny", { start: 95, end: 102 }),
+      frames: this.anims.generateFrameNumbers("suny", { start: 94, end: 103 }),
       frameRate: 10,
       repeat: -1,
     });
     this.anims.create({
       key: "suny-andando-esquerda",
-      frames: this.anims.generateFrameNumbers("suny", { start: 73, end: 80 }),
+      frames: this.anims.generateFrameNumbers("suny", { start: 72, end: 81 }),
       frameRate: 10,
       repeat: -1,
     });
     this.anims.create({
       key: "suny-andando-tras",
-      frames: this.anims.generateFrameNumbers("suny", { start: 62, end: 70 }),
+      frames: this.anims.generateFrameNumbers("suny", { start: 61, end: 70 }),
       frameRate: 10,
       repeat: -1,
     });
     this.anims.create({
       key: "suny-andando-frente",
-      frames: this.anims.generateFrameNumbers("suny", { start: 84, end: 91 }),
+      frames: this.anims.generateFrameNumbers("suny", { start: 83, end: 92 }),
       frameRate: 10,
       repeat: -1,
     });
@@ -966,7 +968,7 @@ export default class fase1 extends Phaser.Scene {
       key: "suny-morte",
       frames: this.anims.generateFrameNumbers("suny", { start: 204, end: 209 }),
       frameRate: 10,
-      repeat: 1,
+      repeat: 0,
     });
   }
 
@@ -974,27 +976,27 @@ export default class fase1 extends Phaser.Scene {
     this.anims.create({
       key: "nephis-andando-direita",
       frames: this.anims.generateFrameNumbers("nephis", {
-        start: 95,
-        end: 102,
+        start: 94,
+        end: 103,
       }),
       frameRate: 10,
       repeat: -1,
     });
     this.anims.create({
       key: "nephis-andando-esquerda",
-      frames: this.anims.generateFrameNumbers("nephis", { start: 73, end: 80 }),
+      frames: this.anims.generateFrameNumbers("nephis", { start: 72, end: 81 }),
       frameRate: 10,
       repeat: -1,
     });
     this.anims.create({
       key: "nephis-andando-tras",
-      frames: this.anims.generateFrameNumbers("nephis", { start: 62, end: 69 }),
+      frames: this.anims.generateFrameNumbers("nephis", { start: 61, end: 70 }),
       frameRate: 10,
       repeat: -1,
     });
     this.anims.create({
       key: "nephis-andando-frente",
-      frames: this.anims.generateFrameNumbers("nephis", { start: 84, end: 91 }),
+      frames: this.anims.generateFrameNumbers("nephis", { start: 83, end: 92 }),
       frameRate: 10,
       repeat: -1,
     });
@@ -1460,7 +1462,8 @@ export default class fase1 extends Phaser.Scene {
       .text(
         this.cameras.main.centerX,
         this.cameras.main.centerY - 110,
-        `${this.assignedCharacter.toUpperCase()} - Level ${this.playerStats.level
+        `${this.assignedCharacter.toUpperCase()} - Level ${
+          this.playerStats.level
         }`,
         {
           fontSize: "16px",
@@ -1590,6 +1593,7 @@ export default class fase1 extends Phaser.Scene {
   }
 
   atualizarUIXP() {
+    // TODO: Implementar barra de XP na interface
   }
 
   sincronizarStats() {
@@ -1794,6 +1798,7 @@ export default class fase1 extends Phaser.Scene {
       this.timerText.setText(this.formatarTempo(this.gameTimer));
     }
 
+    // Verificar se o tempo acabou (vitória)
     if (this.gameTimer <= 0) {
       this.vencerJogo();
     }
@@ -1809,6 +1814,7 @@ export default class fase1 extends Phaser.Scene {
   vencerJogo() {
     console.log("[VITÓRIA] Jogador sobreviveu aos 5 minutos!");
 
+    // Pausar o jogo
     this.physics.world.pause();
     if (
       this.controleScene &&
@@ -1817,6 +1823,7 @@ export default class fase1 extends Phaser.Scene {
       this.controleScene.hideJoystick();
     }
 
+    // Ir para a tela final
     this.time.delayedCall(
       1000,
       () => {
